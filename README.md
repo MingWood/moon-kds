@@ -1,5 +1,5 @@
 # moon-kds
 
-A robust, local-first Kitchen Display System for a coffee shop running Square Terminal and multiple Android tablets.
+Open source, cafe-focused kitchen display system: robust and local-first, built for Square Terminal plus multiple Android tablets.
 
 **Status:** design phase. See [docs/DESIGN.md](docs/DESIGN.md) for requirements, architecture, and open questions.
