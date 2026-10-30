@@ -510,5 +510,5 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | Rev | Date | Notes |
 |---|---|---|
 | 0.1 | 2026-10-30 | First draft: requirements skeleton, failure modes, proposed architecture |
-| 0.3 | 2026-10-30 | Fresh printer-entry evidence reviewed: no handshake or licence evidence found; Fresh began as an Epson printer emulator. D-005 superseded by D-006: S1 captures every printer type, including the Fresh entry |
 | 0.2 | 2026-10-30 | Researched how Fresh works with Square (printer mode over LAN vs Orders API). Printer path becomes primary ingest, with redundancy, OCR risk and reconciliation. Moon-routed vs Square-routed comparison. M0 spikes S1–S5. Assumptions A-01/A-02 confirmed |
+| 0.3 | 2026-10-30 | Fresh printer-entry evidence reviewed: no handshake or licence evidence found; Fresh began as an Epson printer emulator. D-005 superseded by D-006: S1 captures every printer type, including the Fresh entry |
