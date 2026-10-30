@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | DRAFT, revision 0.2 (ingestion redesigned around the printer path) |
+| **Status** | DRAFT, revision 0.3 |
 | **Owner** | Moonwake Roasters |
 | **Last updated** | 2026-10-30 |
 | **Benchmark** | Fresh KDS (the feature set and reliability we must meet or beat) |
@@ -61,9 +61,16 @@ Operational quirks of printer mode, from Fresh's troubleshooting docs:
 - The tablet only advertises itself as a printer **while the app is open in the foreground**. Sleep or minimising breaks it.
 - Android's **randomised (private) MAC address must be turned off** (*Wi-Fi › Advanced › MAC address type › Device MAC*), and a **static IP / DHCP reservation** is recommended. Square can also add the printer by IP (*Advanced Printer Setup*).
 - It doesn't work if the Square device is acting as a hotspot. Mixed 2.4/5 GHz SSIDs cause trouble.
-- **"Fresh KDS" appears as its own printer model inside Square POS.** That means Square has built-in,
-  undocumented support specifically for Fresh. A Square developer-forum answer says the protocol is
-  undocumented and points to Fresh. **We cannot use that model slot**, and we will not impersonate Fresh.
+- **"Fresh KDS" appears as its own printer model inside Square POS.** A Square developer-forum answer says
+  "Fresh KDS read like a printer would", that "they don't actually get the data from APIs", and that the
+  implementation is undocumented.
+- **Origins:** Fresh started out as a pure printer emulator. A Loyverse forum user reports "FreshKDS already
+  integrated an Epson Printer Emulator when you select Square as your POS". Early on, Fresh only worked with
+  the iOS Square app, which is consistent with emulating a printer that app supported. The dedicated "Fresh KDS"
+  entry came later.
+- **No evidence was found of a handshake, licence check or authentication** in the Fresh printer entry. The most
+  likely explanation is a Square printer driver that sends a mildly altered (likely text-based) print stream. This
+  is unverified until we capture it (spike S1).
 
 Sources: [Fresh: treat KDS as a printer](https://help.freshkds.com/en/articles/6289591-how-do-i-treat-fresh-kds-as-a-printer-square),
 [Fresh: printer emulation troubleshooting](https://help.freshkds.com/en/articles/6411775-why-won-t-my-square-pos-connect-to-fresh-kds-printer-emulation),
@@ -79,7 +86,8 @@ Epson: its own discovery) and accept print jobs on TCP 9100.
 ⚠ **Key risk:** independent reverse-engineering reports say **Square sends tickets to Star and Epson printers as
 raster bitmaps, not text** ([Epson TM-m30 analysis](https://wes4m.io/posts/epson_rev/);
 [Star TSP143 bridge](https://github.com/jeff-johnson/tsp143-bridge)). If that's true, an emulated printer
-receives a **picture of the ticket**, and we would have to **OCR** it to get items and modifiers. OCR of
+receives a **picture of the ticket**, and we would have to **OCR** it. The "Fresh KDS" model slot and impact-printer models are the most
+likely to get text instead (see S1); otherwise we to get items and modifiers. OCR of
 machine-rendered, fixed-font text is very accurate, but it's a new failure surface (layout changes in
 Square updates, long modifier lists, special characters). This must be proven in the **M0 spike** before we commit.
 
@@ -435,7 +443,8 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
    - (a) **Impact (dot-matrix) kitchen printers, e.g. Epson TM-U220 class.** These are poor at graphics, so Square very likely sends them **plain text**. That would avoid OCR entirely. ⚠ First confirm the model is on Square's supported list for the Terminal.
    - (b) Epson thermal (TM-m30/TM-T88 class).
    - (c) Star thermal (TSP100/TSP143 LAN).
-   - **Out of scope: posing as the "Fresh KDS" model (D-005).**
+   - (d) **The "Fresh KDS" printer entry:** what does Square send to it, and how does it find the device (mDNS/Bonjour, UDP broadcast, IP)? Is there any handshake or status exchange?
+   - **Every printer model the Terminal offers** gets a captured, documented sample ticket in `docs/protocols/` for posterity, whatever we end up using.
 2. **S2, offline printing:** unplug the router's WAN, take orders on the Terminal in Offline Mode. Does it still print to LAN printers?
 3. **S3, OCR accuracy** (if raster): 200+ real tickets incl. long modifier lists; target ≥ 99.5% exact line accuracy after the template parser.
 4. **S4, API timing:** webhook and poll latency vs the printer path; confirm a field that reliably links a printed ticket to its Square order.
@@ -472,7 +481,7 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | Q-ING-1 | Moon-routed (1–2 ingest printers in Square) vs Square-routed (one printer per tablet)? Recommended: Moon-routed | M2 |
 | Q-ING-2 | Which tablets are ingest tablets? (e.g. Expo + one bar tablet, on different power circuits) | M3 |
 | Q-ING-3 | Is Fresh KDS live in the shop now? Can we run the spike alongside it (separate printer station) without disrupting service? | M0 |
-| Q-LEGAL-1 | Square ToS check on printer emulation | Pilot |
+| Q-LEGAL-1 | Square ToS check on printer emulation, **especially if production relies on the "Fresh KDS" entry** (it carries a third party's name in the Square UI). Decide after S1 shows which formats are viable | Pilot |
 | Q-PART-1 | Ask Square Developer Relations whether a KDS can join the same partner printer/KDS integration Fresh uses (the legitimate route to a structured LAN feed) | M0, in parallel |
 | Q-OFF-2 | Cellular failover for the router? | F1 |
 | Q-ARCH-1 | Peer-to-peer replication vs hub | M1 |
@@ -492,7 +501,8 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | 2026-10-30 | D-002 | Robustness / offline operation is the top priority, above feature breadth | Owner direction |
 | 2026-10-30 | D-003 | One Square Terminal; 8 tablets now, count variable | Owner input |
 | 2026-10-30 | D-004 | **Primary ingest = tablet acts as a LAN network printer for the Terminal** (like Fresh printer mode, which uses Wi-Fi/LAN, not Bluetooth). Square API is the backup and reconciliation path | Owner direction; only path that can work without internet |
-| 2026-10-30 | D-005 | Do not use or imitate the proprietary "Fresh KDS" printer model; emulate a generic supported printer, and ask Square for partner access | Undocumented and partner-specific; impersonation risks the shop's Square (payments) account; Square or Fresh can break it at any time with no recourse; not shippable in an open-source repo |
+| 2026-10-30 | ~~D-005~~ | ~~Do not use or imitate the "Fresh KDS" printer model~~: **superseded by D-006** | Was based on an assumed handshake or licence check, for which no evidence was found |
+| 2026-10-30 | D-006 | Spike S1 captures and documents the message format of **every** printer model the Terminal offers, **including the "Fresh KDS" entry**. The production ingest format is chosen from the results (text over raster; simplest robust option) | Evidence suggests the Fresh entry is a lightly modified printer stream, probably the most decodable; decide on data, not assumption |
 
 ---
 
@@ -500,4 +510,5 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | Rev | Date | Notes |
 |---|---|---|
 | 0.1 | 2026-10-30 | First draft: requirements skeleton, failure modes, proposed architecture |
+| 0.3 | 2026-10-30 | Fresh printer-entry evidence reviewed: no handshake or licence evidence found; Fresh began as an Epson printer emulator. D-005 superseded by D-006: S1 captures every printer type, including the Fresh entry |
 | 0.2 | 2026-10-30 | Researched how Fresh works with Square (printer mode over LAN vs Orders API). Printer path becomes primary ingest, with redundancy, OCR risk and reconciliation. Moon-routed vs Square-routed comparison. M0 spikes S1–S5. Assumptions A-01/A-02 confirmed |
