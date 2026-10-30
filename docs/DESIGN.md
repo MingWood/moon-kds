@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | DRAFT, revision 0.1 (first pass, not yet reviewed) |
+| **Status** | DRAFT, revision 0.2 (ingestion redesigned around the printer path) |
 | **Owner** | Moonwake Roasters |
 | **Last updated** | 2026-10-30 |
 | **Benchmark** | Fresh KDS (the feature set and reliability we must meet or beat) |
@@ -43,24 +43,65 @@ a single tablet failing must not stop it.
 
 ## 2. Background: how Fresh KDS works (benchmark reference)
 
-Fresh KDS is an Android KDS app with Square integration. Its main traits, from public material
-(⚠ check details against a live trial before relying on them):
+### 2.1 Two integration modes
+Fresh KDS (Android/iPad app) can get orders from Square in two ways, chosen per tablet in
+*Settings › General › Integration Type*:
 
-- Orders come from Square through Square's cloud APIs/webhooks, so **Fresh needs the internet to
-  receive new Square orders**.
-- Screens sync with each other, and the cloud, through Fresh's backend. Local-network operation is
-  limited.
-- Features: routing by category/item to screens, expo screen, item-level and order-level bumping,
-  recall, colour-coded timers, all-day item counts, modifier highlighting, bump bar support, customer
-  SMS notifications, customer-facing order status screen, prep-time reports in a web dashboard,
-  and per-screen layout options.
+| | **Printer mode** ("printer emulation") | **Orders API mode** |
+|---|---|---|
+| Transport | **Local Wi-Fi/LAN**: the Square device "prints" to the tablet. **Not Bluetooth.** | Square cloud → Fresh cloud → tablet |
+| Needs internet? | No: Fresh's docs say it works over the local network without internet | Yes |
+| Square-side setup | Each tablet added as a **printer station** (*Settings › Hardware › Printers › Create Printer Station*, model **"Fresh KDS"**), with categories picked per station. Repeat on every Square device. | One OAuth connection in the Fresh dashboard |
+| Routing | Done **in Square** by category per printer station | Done in Fresh |
+| Data quality | "Occasional parsing issues" | Structured data |
+| Lost tickets | **"Cannot be recovered"** after network problems (fire-and-forget) | Recoverable |
+| Fresh's recommendation | Use only for locations with poor or unreliable internet | **Preferred** |
 
-**Where we aim to beat it:** a local-first design so that devices already on the shop network keep
-syncing during an outage, plus a defined degraded mode for taking orders while Square is unreachable
-(see §6).
+Operational quirks of printer mode, from Fresh's troubleshooting docs:
+- The tablet only advertises itself as a printer **while the app is open in the foreground**. Sleep or minimising breaks it.
+- Android's **randomised (private) MAC address must be turned off** (*Wi-Fi › Advanced › MAC address type › Device MAC*), and a **static IP / DHCP reservation** is recommended. Square can also add the printer by IP (*Advanced Printer Setup*).
+- It doesn't work if the Square device is acting as a hotspot. Mixed 2.4/5 GHz SSIDs cause trouble.
+- **"Fresh KDS" appears as its own printer model inside Square POS.** That means Square has built-in,
+  undocumented support specifically for Fresh. A Square developer-forum answer says the protocol is
+  undocumented and points to Fresh. **We cannot use that model slot**, and we will not impersonate Fresh.
 
-❓ **Q-BENCH-1:** Do you currently use (or have you trialled) Fresh KDS? Which features do you rely on
-and which annoy you? That will turn §4 from "parity" into "parity plus fixes".
+Sources: [Fresh: treat KDS as a printer](https://help.freshkds.com/en/articles/6289591-how-do-i-treat-fresh-kds-as-a-printer-square),
+[Fresh: printer emulation troubleshooting](https://help.freshkds.com/en/articles/6411775-why-won-t-my-square-pos-connect-to-fresh-kds-printer-emulation),
+[Fresh: Orders API](https://help.freshkds.com/en/articles/5983132-how-do-i-use-fresh-kds-with-orders-api-square),
+[Square dev forum: custom KDS as hardware](https://developer.squareup.com/forums/t/how-can-i-connect-my-custom-kds-web-app-as-hardware-like-fresh-kds/23570).
+
+### 2.2 What this means for us
+Square POS only prints to printers it recognises: its supported **Star Micronics** and **Epson** network
+models, plus partner models like Fresh. To be a "printer" without Fresh's special slot, our tablet would have to
+**emulate a supported Star or Epson LAN printer**: answer the vendor's discovery protocol (Star: UDP 22222;
+Epson: its own discovery) and accept print jobs on TCP 9100.
+
+⚠ **Key risk:** independent reverse-engineering reports say **Square sends tickets to Star and Epson printers as
+raster bitmaps, not text** ([Epson TM-m30 analysis](https://wes4m.io/posts/epson_rev/);
+[Star TSP143 bridge](https://github.com/jeff-johnson/tsp143-bridge)). If that's true, an emulated printer
+receives a **picture of the ticket**, and we would have to **OCR** it to get items and modifiers. OCR of
+machine-rendered, fixed-font text is very accurate, but it's a new failure surface (layout changes in
+Square updates, long modifier lists, special characters). This must be proven in the **M0 spike** before we commit.
+
+⚠ **Conflicting evidence about offline:** Fresh says printer mode works without internet. Some Square
+community and accessory pages say network printers **can't be used in Square's Offline Mode**, and a
+community answer says offline Terminal sales don't reach Fresh. → **Test on the actual Terminal with the WAN unplugged** (M0).
+
+### 2.3 Features to match
+Routing by category/item to screens, expo screen, item-level and order-level bumping, recall,
+colour-coded timers, all-day item counts, modifier highlighting, bump bar support, customer SMS,
+customer-facing status screen, prep-time reports in a web dashboard, per-screen layouts, and an
+option to show open (unpaid) checks.
+
+**Where we aim to beat it:**
+1. **One Square-side printer, not eight.** Square sends every ticket to one or two "ingest" tablets, and our own
+   inter-tablet sync does the per-station routing (see §7.3). This removes most of the per-tablet Square setup.
+2. **Printer path and API path at the same time**, reconciled, so we get the LAN/offline speed of printer mode
+   **and** the structured, recoverable data of the API. Fresh makes you pick one.
+3. Peer-to-peer replication, so no single tablet or cloud is a point of failure.
+
+❓ **Q-BENCH-1:** Is Fresh currently running in the shop, and in which mode? Which features do you rely on
+and which annoy you?
 
 ---
 
@@ -68,8 +109,8 @@ and which annoy you? That will turn §4 from "parity" into "parity plus fixes".
 
 | ID | Assumption | Confirm? |
 |---|---|---|
-| A-01 | 1 Square Terminal (maybe more at peak) running Square Point of Sale | ❓ |
-| A-02 | 2–4 Android tablets, 10" or larger, wall- or counter-mounted, always powered | ❓ |
+| A-01 | **Exactly 1 Square Terminal** running Square Point of Sale | ✔ confirmed |
+| A-02 | **8 Android tablets today; the count will change.** The design must handle adding or removing tablets without Square-side changes (FR-RTE-07) | ✔ confirmed |
 | A-03 | One shop Wi-Fi network (one router or AP), with clients allowed to see each other (no "AP isolation") | ❓ |
 | A-04 | Peak volume of about 60–120 orders per hour, 1–8 items per order | ❓ |
 | A-05 | Order sources: in-person on the Terminal, plus Square Online and online ordering/delivery integrations that land in Square Orders | ❓ |
@@ -92,8 +133,13 @@ Fresh column: ✔ = Fresh has it, ~ = partial, ✘ = Fresh doesn't have it, ? = 
 | FR-ORD-04 | Reconciliation: periodic poll of Square Orders API catches anything a webhook missed | P0 | ? | Draft |
 | FR-ORD-05 | Handle order updates, cancellations and refunds (ticket marked or removed, with a visual alert) | P0 | ✔ | Draft |
 | FR-ORD-06 | Scheduled or future orders (Square Online pickup times) appear at a configurable lead time before they're due | P1 | ✔ | Draft |
-| FR-ORD-07 | Manual "offline order" entry on any tablet when Square is unreachable (see §6.3) | P1 | ✘ | ❓ |
+| FR-ORD-07 | Manual "offline order" entry on any tablet when Square is unreachable (see §6.1) | P1 | ✘ | ❓ |
 | FR-ORD-08 | Orders taken on the Terminal in Square's offline mode are ingested once Square uploads them, flagged "late" and not double-counted | P0 | ? | Draft |
+| FR-ORD-09 | **Primary ingest = LAN printer path:** a tablet appears to the Terminal as a network kitchen printer and turns each ticket into a structured order (parse text, or OCR if raster) | P0 | ✔ | Spike (M0) |
+| FR-ORD-10 | **Printer path redundancy:** two or more tablets can be ingest printers at once, with duplicate tickets merged into one order | P0 | ✘ | Draft |
+| FR-ORD-11 | **Reconciliation:** when the API path is available, each printer-path ticket is matched to its Square order (by ticket/order number and time). The API data replaces any OCR guesses, and missing tickets are back-filled | P0 | ✘ | Draft |
+| FR-ORD-12 | **Parse confidence:** low-confidence parses are shown as is, with a "check ticket" marker, never silently dropped. The raw ticket image is kept so staff can view it | P0 | ✘ | Draft |
+| FR-ORD-13 | The ingest tablet keeps its printer listener running in a foreground service, so it isn't lost when the screen sleeps or the app is in the background (Fresh's weak spot) | P0 | ✘ | Draft |
 
 ### 4.2 Routing & stations (RTE)
 | ID | Requirement | Pri | Fresh | Status |
@@ -104,6 +150,8 @@ Fresh column: ✔ = Fresh has it, ~ = partial, ✘ = Fresh doesn't have it, ? = 
 | FR-RTE-04 | Any tablet can take over any station's role (failover) in two taps or fewer | P0 | ~ | Draft |
 | FR-RTE-05 | A tablet can show more than one station (e.g. a quiet day runs on one screen) | P1 | ✔ | Draft |
 | FR-RTE-06 | Routing rules are edited on a tablet or the cloud dashboard and synced everywhere | P1 | ✔ | Draft |
+| FR-RTE-07 | **Routing lives in Moon KDS, not Square.** Adding, removing or reassigning a tablet needs no change in Square POS settings | P0 | ✘ | Draft |
+| FR-RTE-08 | Optional "Square-routed" mode: if a tablet is added as its own printer station in Square, it shows exactly what Square sends (Fresh-style), and those tickets still sync for expo and stats | P2 | ✔ | ❓ |
 
 ### 4.3 Display & interaction (UI)
 | ID | Requirement | Pri | Fresh | Status |
@@ -156,6 +204,7 @@ Fresh column: ✔ = Fresh has it, ~ = partial, ✘ = Fresh doesn't have it, ? = 
 | FR-ADM-03 | Config is versioned and synced (local and cloud), so a replacement tablet comes up fully configured | P0 | ✔ | Draft |
 | FR-ADM-04 | Kiosk mode: app starts on boot, staff can't leave it, and it stays awake | P0 | ~ | Draft |
 | FR-ADM-05 | Square OAuth connection is managed from the dashboard | P0 | ✔ | Draft |
+| FR-ADM-06 | Guided setup checklist for ingest tablets: Device MAC, static IP / DHCP reservation, battery-optimisation exemption, Square printer station test print | P0 | ~ | Draft |
 
 ---
 
@@ -182,24 +231,27 @@ Fresh column: ✔ = Fresh has it, ~ = partial, ✘ = Fresh doesn't have it, ? = 
 
 ## 6. Robustness & failure modes (the core of the design)
 
-### 6.1 The hard constraint: where orders come from
-Square Point of Sale on the Terminal is a closed app. Third-party apps **cannot** read orders from it
-directly over the LAN. Orders reach outside systems **only through Square's cloud** (webhooks and
-the Orders API). So:
+### 6.1 Where orders come from: two independent paths
+Square POS on the Terminal is a closed app. Orders leave it in only two ways:
 
-> **If the shop's internet is down, no Square order can reach any KDS, ours or Fresh's.**
-> Square's own offline mode stores payments on the Terminal and uploads them later.
+| Path | Transport | Works without internet? | Data | Recoverable? |
+|---|---|---|---|---|
+| **P1: Printer path** (primary) | Terminal → LAN → ingest tablet(s) emulating a network kitchen printer | **Likely**, per Fresh; ⚠ conflicting reports, so verify in M0 | Ticket as text or **bitmap** (needs OCR) | No, so we add redundant ingest tablets plus P2 reconciliation |
+| **P2: API path** (backup and source of truth) | Square cloud → webhooks to Moon Cloud, **and** the on-site Orders API poll | No | Fully structured | Yes, by polling since the last cursor |
 
-What we *can* guarantee during an outage:
-1. Every ticket already on the screens stays fully workable, and bumps keep syncing over the LAN.
-2. Orders keep flowing again as soon as the internet returns, including ones Square queued offline (FR-ORD-08).
-3. A defined way to keep making drinks during the outage (pick one in Q-OFF-1 below).
+How they work together:
+- **Normal operation:** P1 puts the ticket on screen in about 1 s. P2 arrives a few seconds later, matches the
+  ticket (FR-ORD-11), and quietly fixes any parse errors and adds structured metadata such as the customer name, source and catalog IDs.
+- **Internet down:** P1 keeps feeding the KDS (if M0 confirms the Terminal still prints offline). When the internet
+  returns, P2 back-fills and reconciles.
+- **Printer path broken** (ingest tablet asleep or crashed, Wi-Fi glitch): the second ingest tablet covers it, and P2 back-fills anything missed within seconds while online.
+- **Both down** (internet out **and** the Terminal won't print offline): fall back per Q-OFF-1.
 
-❓ **Q-OFF-1: How should orders get to the bar during an internet outage?** Options:
-- **(a) Paper fallback:** Square's offline mode prints the receipt or ticket on the Terminal, and staff work from paper. We add nothing. *Simplest.*
-- **(b) Manual quick-entry on a tablet:** a fast menu (synced from the Square catalog) on the expo or register tablet. Staff ring it on the Terminal for payment and tap it into the KDS. When Square catches up, we match the Square order to the manual ticket. *Medium effort; matching can be fuzzy.*
-- **(c) Our own POS front-end:** a custom Android POS app on a tablet that takes the payment through Square (Mobile Payments SDK with a Square Reader, which supports offline payments) and writes orders straight into the local KDS. *Most robust, but replaces the Terminal workflow. Big scope.*
-- Recommendation: **(a) for v1, design for (b) in v1.x**. Keep (c) as a long-term option.
+❓ **Q-OFF-1: Fallback if both paths are down.** Options:
+- **(a) Paper fallback:** staff work from Terminal receipts. *Simplest.*
+- **(b) Manual quick-entry on a tablet** from the synced Square catalog, matched to Square orders later.
+- **(c) Our own POS front-end** (Mobile Payments SDK with a Square Reader). Big scope.
+- Recommendation: **(a) for v1**, and revisit after M0 shows how often this case actually happens.
 
 ❓ **Q-OFF-2:** Are you open to an extra cellular backup for the router (an LTE failover modem, about $10–20/mo)?
 It covers far more outages than any software fallback and helps Square's own payments too.
@@ -207,7 +259,11 @@ It covers far more outages than any software fallback and helps Square's own pay
 ### 6.2 Failure-mode table
 | # | Failure | Effect | Mitigation | Req |
 |---|---|---|---|---|
-| F1 | Internet down | No new Square orders; cloud unreachable | LAN sync continues; stats buffered; banner "Square offline — orders will resume"; fallback per Q-OFF-1 | NFR-REL-02 |
+| F1 | Internet down | API path and cloud unreachable | Printer path keeps ingesting over the LAN; LAN sync continues; stats buffered; banner "Internet offline — printer path only"; fallback per Q-OFF-1 | NFR-REL-02 |
+| F1b | Ingest tablet asleep, crashed or off Wi-Fi | Printer path partly or fully lost | Two or more ingest tablets (FR-ORD-10); foreground service (FR-ORD-13); API back-fill; **alert on every screen if no ingest printer is healthy** | FR-ORD-10 |
+| F1c | OCR/parse error | Wrong or missing item on screen | Confidence marker plus raw image (FR-ORD-12); API reconciliation overwrites it within seconds | FR-ORD-11/12 |
+| F1d | Square update changes ticket layout | Parser breaks | Parser is template-driven and versioned; golden-ticket regression tests; API path keeps orders correct | FR-ORD-11 |
+| F1e | Ingest tablet's IP changes | Terminal can't reach the printer | DHCP reservation + Device MAC (setup checklist); health check shows "last ticket received" | FR-ADM-06 |
 | F2 | Our cloud down (internet OK) | If the cloud is the only ingest path, no new orders | **Two ingest paths**: cloud webhook receiver **and** on-site hub polling the Square API directly (see §7.3) | NFR-REL-05 |
 | F3 | Wi-Fi / LAN down, internet OK via cellular | Tablets can't see each other | Cloud relay path (FR-SYN-03) | FR-SYN-03 |
 | F4 | Wi-Fi fully down | Each tablet isolated | Each keeps working on its own local state; merges on reconnect (CRDT/event log) | FR-SYN-04/05 |
@@ -227,30 +283,42 @@ It covers far more outages than any software fallback and helps Square's own pay
 ### 7.1 Overview
 ```
                      ┌──────────────────── Square Cloud ────────────────────┐
-  Square Terminal ──▶│  Orders API · Webhooks · Catalog API · OAuth         │
-                     └──────┬───────────────────────────────┬───────────────┘
-                   webhooks │                               │ poll (backup path)
-                            ▼                               │
-              ┌──────────────────────────┐                  │
-              │   Moon Cloud             │                  │
-              │ • webhook receiver       │                  │
-              │ • event store / stats DB │                  │
-              │ • config & backup        │                  │
-              │ • relay (WebSocket)      │                  │
-              │ • web dashboard          │                  │
-              └──────────┬───────────────┘                  │
-             WSS (relay, │ stats upload, config)            │
-   ══════════════════════╪══════════ shop internet ═════════╪══════════
-                         │                                  │
-        ┌────────────────┴──────── shop LAN (Wi-Fi) ────────┴───────┐
-        │                                                           │
-        │  ┌───────────┐   ┌───────────┐   ┌───────────┐  ┌───────┐ │
-        │  │ Tablet A  │◀─▶│ Tablet B  │◀─▶│ Tablet C  │◀▶│ Expo  │ │
-        │  │ Hot bar   │   │ Cold bar  │   │ Food      │  │       │ │
-        │  └───────────┘   └───────────┘   └───────────┘  └───────┘ │
-        │     every tablet: full replica (SQLite) + sync engine     │
-        └───────────────────────────────────────────────────────────┘
+                     │  Orders API · Webhooks · Catalog API · OAuth         │
+                     └──────┬───────────────────────────────▲───────┬───────┘
+                   webhooks │                     sync up   │       │ P2: API poll
+                            ▼                               │       │ (backup path)
+              ┌──────────────────────────┐                  │       │
+              │   Moon Cloud             │                  │       │
+              │ • webhook receiver (P2)  │                  │       │
+              │ • event store / stats DB │                  │       │
+              │ • config & backup        │                  │       │
+              │ • relay (WebSocket)      │                  │       │
+              │ • web dashboard          │                  │       │
+              └──────────┬───────────────┘                  │       │
+             WSS (relay, │ stats upload, config)            │       │
+   ══════════════════════╪══════════ shop internet ═════════╪═══════╪══════
+                         │                                  │       │
+  ┌──────────────────────┴──────── shop LAN (Wi-Fi) ────────┴───────┴──────┐
+  │                                                                        │
+  │   ┌─────────────────┐   P1: "print" kitchen ticket (TCP 9100)          │
+  │   │ Square Terminal │────────────┬───────────────────┐                 │
+  │   └─────────────────┘            ▼                   ▼                 │
+  │                         ┌────────────────┐   ┌────────────────┐        │
+  │                         │ Ingest tablet 1│   │ Ingest tablet 2│        │
+  │                         │ (e.g. Expo)    │   │ (e.g. Hot bar) │        │
+  │                         │ printer emu +  │   │ printer emu +  │        │
+  │                         │ parser/OCR     │   │ parser/OCR     │        │
+  │                         └───────┬────────┘   └───────┬────────┘        │
+  │                                 │  OrderReceived     │                 │
+  │                                 ▼  events (deduped)  ▼                 │
+  │   ◀════════ peer-to-peer event-log sync (WebSocket, mDNS) ════════▶    │
+  │   ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐    │
+  │   │ Tab 3  │ │ Tab 4  │ │ Tab 5  │ │ Tab 6  │ │ Tab 7  │ │ Tab 8  │    │
+  │   └────────┘ └────────┘ └────────┘ └────────┘ └────────┘ └────────┘    │
+  │   every tablet: full replica (SQLite) + routing rules → its stations   │
+  └────────────────────────────────────────────────────────────────────────┘
 ```
+Square only knows about **one or two printers**. Moon KDS decides which tablet shows which item.
 
 ### 7.2 Sync model: replicated event log (recommended)
 - All state changes are **immutable events**: `OrderReceived`, `OrderUpdated`, `ItemBumped`,
@@ -267,10 +335,39 @@ It covers far more outages than any software fallback and helps Square's own pay
 
 ❓ **Q-ARCH-1:** Agree with peer-to-peer replication over a single hub tablet? (Recommended: P2P.)
 
-### 7.3 Order ingestion: two independent paths
-1. **Cloud path (primary):** Square webhook (`order.created`, `order.updated`, `order.fulfillment.updated`, `payment.*`)
+### 7.3 Order ingestion
+
+#### 7.3.1 Printer path (P1): Square-routed vs Moon-routed
+| | **Square-routed** (Fresh style) | **Moon-routed** (recommended) |
+|---|---|---|
+| Square printer stations | One per tablet (8 today) | **1–2 ingest stations, "all categories"** |
+| Where routing lives | Square categories per printer | Moon KDS rules, synced over the LAN |
+| Add or move a tablet | Edit Square on the Terminal | Pick a station on the tablet; Square untouched |
+| Item- or modifier-level routing | Category only | Category, item, modifier, order type |
+| Expo sees the whole order | Needs its own "all" printer | Built in |
+| Terminal print load per order | Up to 8 jobs over Wi-Fi | 1–2 jobs |
+| Depends on inter-tablet sync | No | **Yes** (it's P2P, local-first, and has no single point of failure, see §7.2) |
+| If an ingest tablet dies | Only its station is lost | Covered by the second ingest tablet |
+
+Both can run at once (FR-RTE-08). Moon-routed is the default.
+
+#### 7.3.2 Printer emulation (needs the M0 spike)
+- **Discovery:** answer Square's printer discovery for one supported model (Star LAN, e.g. TSP143IIILAN or TSP100IV,
+  on UDP 22222, or Epson TM-m30-class), or rely on Square's "Advanced Printer Setup" by IP and skip discovery.
+- **Job intake:** TCP 9100 (raw/StarPRNT/ESC-POS), plus whatever status channel the model needs (Star uses TCP 9101 status).
+  The ack must look like a real printer's, or Square will show "printer error".
+- **Decode:** text ESC/POS → parse directly; raster → render to bitmap → **on-device OCR**
+  (ML Kit Text Recognition, offline) → template parser (header, ticket #, name, order type, items, indented modifiers, notes).
+- **Dedupe key:** Square ticket/order number + time window + content hash (FR-ORD-10).
+- **Reconcile with P2:** match on the ticket number shown on the Square order (`ticket_name`/display number) plus time.
+  Each field is tagged by source; API data wins.
+- **Legal / ToS:** emulating a generic printer protocol for interoperability is our working assumption. We **do not**
+  use or imitate the "Fresh KDS" model. ❓ **Q-LEGAL-1:** check the Square seller ToS before the pilot.
+
+#### 7.3.3 API path (P2)
+1. **Cloud webhook:** Square webhook (`order.created`, `order.updated`, `order.fulfillment.updated`, `payment.*`)
    → Moon Cloud → fetch full order → `OrderReceived` event → pushed to tablets over the relay.
-2. **On-site path (backup and low-latency):** one or more tablets marked "ingestor" poll the Square
+2. **On-site poll:** one or more tablets marked "ingestor" poll the Square
    Orders API (`SearchOrders`, updated since the last cursor) every 2–5 s while online, and write the same `OrderReceived` events.
    This keeps orders flowing **when our cloud is down but the internet is up** (F2).
 - Both paths produce events keyed on `square_order_id + version`, so duplicates collapse (FR-ORD-03).
@@ -331,9 +428,19 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 
 | M | Scope | Exit criteria |
 |---|---|---|
-| M0 | **Design sign-off** (this doc) + **Square API spike** (webhook latency, polling, offline-order behaviour) | All P0 ❓ resolved |
+| M0 | **Design sign-off** (this doc) + **Square spikes** (below) | All P0 ❓ resolved; go/no-go on the printer path |
+
+**M0 spikes** (need the real Terminal, one spare Android tablet, and a laptop on the shop LAN):
+1. **S1, what does Square send?** Add an emulated Star (and Epson) LAN printer, capture the bytes for a test print and real orders. Text or raster? Which models does the Terminal offer?
+2. **S2, offline printing:** unplug the router's WAN, take orders on the Terminal in Offline Mode. Does it still print to LAN printers?
+3. **S3, OCR accuracy** (if raster): 200+ real tickets incl. long modifier lists; target ≥ 99.5% exact line accuracy after the template parser.
+4. **S4, API timing:** webhook and poll latency vs the printer path; confirm a field that reliably links a printed ticket to its Square order.
+5. **S5, multi-printer behaviour:** Terminal with 2 ingest printers. Are both printed in parallel? Is there a retry if one is down? Error pop-ups on the Terminal?
+
+| M | Scope | Exit criteria |
+|---|---|---|
 | M1 | `core-model` + `core-sync`: event log, HLC, reducers, LAN sync between emulators | Property tests: random event orders converge |
-| M2 | Single-station KDS UI fed by Square sandbox orders (on-site polling) | Orders on screen < 3 s; bump/recall |
+| M2 | Single-station KDS UI fed by the **printer path** (ingest + parse/OCR), plus the API poll for reconciliation | Orders on screen < 2 s; bump/recall; reconciliation fixes injected parse errors |
 | M3 | Multi-station routing, expo, multi-tablet LAN sync, failover | Chaos test: kill/rejoin tablets, Wi-Fi off/on |
 | M4 | Cloud: webhook ingest, relay, stats upload, minimal dashboard | Offline buffer replays with no loss |
 | M5 | Pilot in the shop alongside paper or Fresh; fix what the bar finds | 2 weeks with no lost tickets |
@@ -357,7 +464,11 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 |---|---|---|
 | Q-BENCH-1 | Fresh KDS experience: what you like and dislike | §4 priorities |
 | Q-A-01..06 | Confirm shop assumptions (§3) | Sizing, routing |
-| Q-OFF-1 | Order fallback during an internet outage: paper / manual entry / own POS | Scope of M2–M6 |
+| Q-OFF-1 | Fallback when both the printer and API paths are down: paper / manual entry / own POS | Scope of M2–M6 |
+| Q-ING-1 | Moon-routed (1–2 ingest printers in Square) vs Square-routed (one printer per tablet)? Recommended: Moon-routed | M2 |
+| Q-ING-2 | Which tablets are ingest tablets? (e.g. Expo + one bar tablet, on different power circuits) | M3 |
+| Q-ING-3 | Is Fresh KDS live in the shop now? Can we run the spike alongside it (separate printer station) without disrupting service? | M0 |
+| Q-LEGAL-1 | Square ToS check on printer emulation | Pilot |
 | Q-OFF-2 | Cellular failover for the router? | F1 |
 | Q-ARCH-1 | Peer-to-peer replication vs hub | M1 |
 | Q-ARCH-2 | Square token on a tablet vs dedicated on-site box | M2, NFR-SEC-02 |
@@ -374,6 +485,9 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 |---|---|---|---|
 | 2026-10-30 | D-001 | Fresh KDS is the main benchmark | Owner direction |
 | 2026-10-30 | D-002 | Robustness / offline operation is the top priority, above feature breadth | Owner direction |
+| 2026-10-30 | D-003 | One Square Terminal; 8 tablets now, count variable | Owner input |
+| 2026-10-30 | D-004 | **Primary ingest = tablet acts as a LAN network printer for the Terminal** (like Fresh printer mode, which uses Wi-Fi/LAN, not Bluetooth). Square API is the backup and reconciliation path | Owner direction; only path that can work without internet |
+| 2026-10-30 | D-005 | Do not use or imitate the proprietary "Fresh KDS" printer model; emulate a generic supported printer | Undocumented and partner-specific; ToS and ethics |
 
 ---
 
@@ -381,3 +495,4 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | Rev | Date | Notes |
 |---|---|---|
 | 0.1 | 2026-10-30 | First draft: requirements skeleton, failure modes, proposed architecture |
+| 0.2 | 2026-10-30 | Researched how Fresh works with Square (printer mode over LAN vs Orders API). Printer path becomes primary ingest, with redundancy, OCR risk and reconciliation. Moon-routed vs Square-routed comparison. M0 spikes S1–S5. Assumptions A-01/A-02 confirmed |
