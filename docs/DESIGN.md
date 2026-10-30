@@ -431,7 +431,11 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | M0 | **Design sign-off** (this doc) + **Square spikes** (below) | All P0 ❓ resolved; go/no-go on the printer path |
 
 **M0 spikes** (need the real Terminal, one spare Android tablet, and a laptop on the shop LAN):
-1. **S1, what does Square send?** Add an emulated Star (and Epson) LAN printer, capture the bytes for a test print and real orders. Text or raster? Which models does the Terminal offer?
+1. **S1, what does Square send?** Add emulated LAN printers and capture the bytes for a test print and real orders. Which models does the Terminal offer? Text or raster? Try in this order:
+   - (a) **Impact (dot-matrix) kitchen printers, e.g. Epson TM-U220 class.** These are poor at graphics, so Square very likely sends them **plain text**. That would avoid OCR entirely. ⚠ First confirm the model is on Square's supported list for the Terminal.
+   - (b) Epson thermal (TM-m30/TM-T88 class).
+   - (c) Star thermal (TSP100/TSP143 LAN).
+   - **Out of scope: posing as the "Fresh KDS" model (D-005).**
 2. **S2, offline printing:** unplug the router's WAN, take orders on the Terminal in Offline Mode. Does it still print to LAN printers?
 3. **S3, OCR accuracy** (if raster): 200+ real tickets incl. long modifier lists; target ≥ 99.5% exact line accuracy after the template parser.
 4. **S4, API timing:** webhook and poll latency vs the printer path; confirm a field that reliably links a printed ticket to its Square order.
@@ -469,6 +473,7 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | Q-ING-2 | Which tablets are ingest tablets? (e.g. Expo + one bar tablet, on different power circuits) | M3 |
 | Q-ING-3 | Is Fresh KDS live in the shop now? Can we run the spike alongside it (separate printer station) without disrupting service? | M0 |
 | Q-LEGAL-1 | Square ToS check on printer emulation | Pilot |
+| Q-PART-1 | Ask Square Developer Relations whether a KDS can join the same partner printer/KDS integration Fresh uses (the legitimate route to a structured LAN feed) | M0, in parallel |
 | Q-OFF-2 | Cellular failover for the router? | F1 |
 | Q-ARCH-1 | Peer-to-peer replication vs hub | M1 |
 | Q-ARCH-2 | Square token on a tablet vs dedicated on-site box | M2, NFR-SEC-02 |
@@ -487,7 +492,7 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | 2026-10-30 | D-002 | Robustness / offline operation is the top priority, above feature breadth | Owner direction |
 | 2026-10-30 | D-003 | One Square Terminal; 8 tablets now, count variable | Owner input |
 | 2026-10-30 | D-004 | **Primary ingest = tablet acts as a LAN network printer for the Terminal** (like Fresh printer mode, which uses Wi-Fi/LAN, not Bluetooth). Square API is the backup and reconciliation path | Owner direction; only path that can work without internet |
-| 2026-10-30 | D-005 | Do not use or imitate the proprietary "Fresh KDS" printer model; emulate a generic supported printer | Undocumented and partner-specific; ToS and ethics |
+| 2026-10-30 | D-005 | Do not use or imitate the proprietary "Fresh KDS" printer model; emulate a generic supported printer, and ask Square for partner access | Undocumented and partner-specific; impersonation risks the shop's Square (payments) account; Square or Fresh can break it at any time with no recourse; not shippable in an open-source repo |
 
 ---
 
