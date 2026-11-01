@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | DRAFT, revision 0.3 |
+| **Status** | DRAFT, revision 0.4 |
 | **Owner** | Moonwake Roasters |
-| **Last updated** | 2026-10-30 |
+| **Last updated** | 2026-11-01 |
 | **Benchmark** | Fresh KDS (the feature set and reliability we must meet or beat) |
 
 > This document is the single source of truth for requirements, architecture and decisions.
@@ -168,14 +168,14 @@ Fresh column: ✔ = Fresh has it, ~ = partial, ✘ = Fresh doesn't have it, ? = 
 | FR-UI-02 | Elapsed-time timer per ticket with colour thresholds (e.g. green, then yellow at 3 min, red at 5 min), configurable per station | P0 | ✔ | Draft |
 | FR-UI-03 | Bump a whole order with one tap; bump single items by tapping an item | P0 | ✔ | Draft |
 | FR-UI-04 | Recall / undo the last N bumped orders (at least the last 20, or last 30 min) | P0 | ✔ | Draft |
-| FR-UI-05 | Highlight modifiers, allergies and notes (e.g. "OAT", "EXTRA HOT", allergy keywords in red) | P0 | ✔ | Draft |
+| FR-UI-05 | Highlight modifiers, allergies and notes (e.g. "OAT", "EXTRA HOT", allergy keywords in red), driven by the formatting rules in §4.8 | P0 | ✔ | Draft |
 | FR-UI-06 | Show order number or customer name, source (in-store, online, delivery) and dine-in or to-go | P0 | ✔ | Draft |
 | FR-UI-07 | All-day counts: running totals of items outstanding (e.g. "6× Oat Latte") | P1 | ✔ | Draft |
 | FR-UI-08 | Audible chime on a new order, configurable per station | P0 | ✔ | Draft |
 | FR-UI-09 | Item consolidation: identical items with identical modifiers grouped as "2×" | P1 | ✔ | Draft |
 | FR-UI-10 | Mark in progress / started (e.g. tap the header), visible to other stations | P1 | ~ | Draft |
 | FR-UI-11 | Prioritise or rush a ticket; pin it to the front | P2 | ? | Draft |
-| FR-UI-12 | Hardware bump bar or USB/Bluetooth keypad support | P2 | ✔ | ❓ |
+| FR-UI-12 | Hardware bump bar / keypad / arcade-button support (see §4.9) | P0 | ✔ | Draft |
 | FR-UI-13 | Status bar on every screen showing connectivity (LAN peers, cloud, Square) at all times | P0 | ~ | Draft |
 | FR-UI-14 | Dark theme by default, large touch targets (≥ 48 dp, ideally 64 dp), readable from 1.5 m | P0 | ✔ | Draft |
 
@@ -213,6 +213,63 @@ Fresh column: ✔ = Fresh has it, ~ = partial, ✘ = Fresh doesn't have it, ? = 
 | FR-ADM-04 | Kiosk mode: app starts on boot, staff can't leave it, and it stays awake | P0 | ~ | Draft |
 | FR-ADM-05 | Square OAuth connection is managed from the dashboard | P0 | ✔ | Draft |
 | FR-ADM-06 | Guided setup checklist for ingest tablets: Device MAC, static IP / DHCP reservation, battery-optimisation exemption, Square printer station test print | P0 | ~ | Draft |
+
+### 4.8 Custom ticket formatting (FMT)
+Staff need to spot certain options at a glance, e.g. **decaf** or **dark roast** espresso, or **oat** vs
+**almond** milk. Formatting is configured on a settings screen (and on the dashboard) as a list of **rules**.
+
+| ID | Requirement | Pri | Fresh | Status |
+|---|---|---|---|---|
+| FR-FMT-01 | **Settings screen for formatting rules** (behind the admin PIN): create, edit, reorder, enable/disable and delete rules | P0 | ~ | Draft |
+| FR-FMT-02 | **Rule match** on any of: modifier (e.g. "Decaf", "Oat Milk"), modifier group (e.g. "Milk"), item, category, keyword in notes, order type/source. Match by Square catalog ID when known (API path), **and** by normalised name (printer path), with case- and whitespace-insensitive matching and an optional regex | P0 | ✘ | Draft |
+| FR-FMT-03 | **Rule styles:** text colour, background/pill colour, bold, uppercase, larger font, icon/badge (e.g. ☕ DECAF), border or tint on the whole item or the whole ticket, optional blink for critical rules (e.g. allergies) | P0 | ~ | Draft |
+| FR-FMT-04 | **Rename / abbreviate / hide:** display "Oat Milk" as "OAT", hide noise modifiers such as "Regular" or "Whole Milk (default)", and set the modifier order (e.g. shots → milk → syrup → temp) | P0 | ~ | Draft |
+| FR-FMT-05 | **Scope:** each rule applies to all stations or to selected stations or tablets (e.g. milk colours only on the bar) | P0 | ✘ | Draft |
+| FR-FMT-06 | **Conflict resolution:** rules have an explicit priority. When several match, styles merge in priority order (highest wins per property) | P0 | ✘ | Draft |
+| FR-FMT-07 | **Live preview** in the editor with a sample ticket and real recent tickets | P0 | ✘ | Draft |
+| FR-FMT-08 | **Option picker** built from the Square catalog (API path) and from modifier names seen on recent tickets, so staff pick "Almond Milk" from a list instead of typing it | P1 | ✘ | Draft |
+| FR-FMT-09 | **Accessibility:** colour is never the only signal. Every colour rule also gets text or a badge; the palette is colour-blind safe and legible on the dark theme (≥ 4.5:1 contrast check in the editor) | P0 | ✘ | Draft |
+| FR-FMT-10 | **Rules sync** to all tablets as versioned `ConfigChanged` events, work offline, and can be exported/imported as JSON (back up and share between shops) | P0 | ✘ | Draft |
+| FR-FMT-11 | **Item-level styles:** e.g. tint all iced drinks blue, or flag items with 3+ modifiers as "complex" | P1 | ✘ | Draft |
+| FR-FMT-12 | **Starter presets** for a coffee shop: decaf, dark roast, half-caf, each alt-milk colour, extra shot, iced, allergy keywords. One tap to load, then edit | P1 | ✘ | Draft |
+| FR-FMT-13 | **Sound or attention rules:** a matching item can trigger a distinct chime (e.g. allergy) | P2 | ✘ | Draft |
+
+Example rule set (starter preset sketch):
+
+| Match | Display as | Style |
+|---|---|---|
+| Modifier "Decaf" | `DECAF` | purple pill, white bold text |
+| Modifier "Half Caf" | `½ CAF` | purple outline pill |
+| Modifier "Dark Roast" (espresso group) | `DARK` | dark-brown pill, cream text |
+| Modifier "Oat Milk" | `OAT` | amber pill |
+| Modifier "Almond Milk" | `ALMOND` | tan pill with ◆ badge |
+| Modifier "Soy Milk" | `SOY` | green pill |
+| Modifier "Whole Milk" | *(hidden, default)* | — |
+| Notes contain "allerg", "nut", "gluten" | as typed | red tint on the whole ticket + ⚠ badge, blink 3 s |
+
+### 4.9 Peripheral input: hotkeys, bump bars and arcade buttons (INP)
+Goal: staff can bump items and orders with **big physical buttons** (arcade-style, wet-hands friendly)
+without touching the screen. Touch always keeps working alongside.
+
+| ID | Requirement | Pri | Fresh | Status |
+|---|---|---|---|---|
+| FR-INP-01 | Accept input from **USB HID keyboards** (wired, via USB-C OTG) and **Bluetooth HID keyboards** | P0 | ✔ | Draft |
+| FR-INP-02 | Accept input from **HID gamepad/joystick encoders** (the cheap "zero-delay" USB arcade encoders appear as gamepads, not keyboards) | P0 | ✘ | Draft |
+| FR-INP-03 | **Per-tablet key mapping screen** with a "press a button to assign" learn mode. Any key or gamepad button can map to any action | P0 | ~ | Draft |
+| FR-INP-04 | **Actions:** next/previous ticket, next/previous item, bump selected item, bump selected ticket, **direct bump ticket by position (1–9)**, start/in-progress, recall last, undo, scroll page, toggle all-day view, rush/pin | P0 | ✔ | Draft |
+| FR-INP-05 | **Visible selection cursor** (thick, high-contrast outline) that the buttons move. The cursor follows sensibly when tickets arrive or leave (never jumps onto a newly arrived ticket mid-action) | P0 | ✔ | Draft |
+| FR-INP-06 | **Long-press and double-press** can be mapped separately (e.g. long-press "bump" = recall), with configurable thresholds | P1 | ✘ | Draft |
+| FR-INP-07 | **Safety:** debounce (default 150 ms), ignore repeats while held, and a short undo toast after every hardware bump | P0 | ~ | Draft |
+| FR-INP-08 | **Presets** for common layouts: 2-button (next + bump), 4-button (prev/next/bump/recall), 10-key bump bar (Fresh-style), numeric keypad | P1 | ~ | Draft |
+| FR-INP-09 | Device status shown in the status bar (keyboard/gamepad connected), with an alert if a configured device disconnects | P1 | ✘ | Draft |
+| FR-INP-10 | Input never leaks out of kiosk mode (no system shortcuts like Home/Alt-Tab reaching Android) | P0 | ✘ | Draft |
+| FR-INP-11 | **Remote buttons:** a button box attached to tablet A can act on another station's tickets (action sent as an event over sync), e.g. one bump box at the hand-off counter | P2 | ✘ | Draft |
+
+Hardware notes (detail in §8):
+- **Arcade buttons + USB encoder** (~$15–30): the simplest option. Choose a **keyboard-mode** encoder (e.g. I-PAC-style) or a gamepad-mode encoder, since both are supported (FR-INP-01/02).
+- **DIY:** an RP2040 or ESP32 board running keyboard firmware (QMK/KMK) acts as a USB or BLE keyboard. Easy to make wireless.
+- **Power:** a USB-C OTG device blocks the tablet's charging port unless you use an **OTG hub with power pass-through** (verify per tablet model). Bluetooth avoids this but needs batteries or power, and adds pairing and drop-out risk.
+- **Wet environment:** sealed arcade buttons or IP65 keypads; mount the box away from the steam wand.
 
 ---
 
@@ -392,20 +449,66 @@ Both can run at once (FR-RTE-08). Moon-routed is the default.
   - **Cloudflare Workers + Durable Objects + D1:** WebSocket relay is natural with Durable Objects, very cheap, always on.
   - **Supabase (Postgres + Realtime + Edge Functions):** good SQL for stats, built-in auth.
   - **Small VPS (Fly.io or Hetzner) running a Kotlin/Ktor server + Postgres:** shares code with the Android app.
-  - Recommendation: Cloudflare (cost and uptime) or Ktor on Fly (code sharing). Decide after the spike.
+  - Recommendation: **Ktor on Fly.io or a small VPS**, which shares the Kotlin core with the tablets (see §7.5.4). Cloudflare stays an option for the relay. Decide after the spike.
 
-### 7.5 Android app
-- **Kotlin + Jetpack Compose**, min SDK 26 (Android 8), target the latest version.
-- **SQLite** through Room or SQLDelight (SQLDelight if the sync core moves into Kotlin Multiplatform shared with the cloud).
-- **Ktor** embedded server and client for LAN WebSockets, **NsdManager** (mDNS) for discovery.
-- Foreground service keeps the sync engine alive; `BOOT_COMPLETED` starts the app; lock task (kiosk) mode
-  through Android Device Owner provisioning.
+### 7.5 Android app: technology choice
+
+#### 7.5.1 What the stack must do well (from the requirements)
+1. **Raw networking:** a TCP 9100 server and UDP discovery responder for printer emulation (FR-ORD-09); LAN WebSocket server and client; mDNS.
+2. **Always on in the background:** a foreground service that keeps the printer listener and sync engine alive when the screen sleeps (FR-ORD-13), plus boot start and kiosk / Device Owner (FR-ADM-04).
+3. **Hardware input:** keyboard **and gamepad** key events, long-press, and focus handling (FR-INP-*).
+4. **On-device OCR** if tickets turn out to be raster (ML Kit, offline).
+5. **Rendering:** smooth with 50+ tickets and many styled pills (FMT) on a cheap tablet.
+6. **A deterministic, heavily tested core:** event log, HLC, reducers, sync protocol, ticket parser and formatting rules engine. Ideally shared with the cloud.
+7. Maintainable by a small team for years, with good tooling and AI-assist support.
+
+#### 7.5.2 Options compared
+Score: ●●● strong · ●● adequate (some extra work) · ● weak (significant custom native work) · ✘ not possible
+
+| Criterion | **Kotlin native** (Jetpack Compose) | **Kotlin Multiplatform** (shared core + Compose) | **React Native** (TypeScript, New Architecture / Expo) | **Flutter** (Dart) | **.NET MAUI** (C#) | **Web / PWA** in a kiosk browser (or Capacitor) | **Java native** (Views) |
+|---|---|---|---|---|---|---|---|
+| TCP 9100 server / UDP discovery | ●●● platform APIs | ●●● | ●● community libs (`react-native-tcp-socket`, `-udp`); custom native module for anything unusual | ●●● `dart:io` sockets built in | ●●● .NET sockets | ✘ browsers cannot listen on sockets (Capacitor: native plugin needed) | ●●● |
+| mDNS (NsdManager) | ●●● | ●●● | ●● `react-native-zeroconf` | ●● `nsd` / `multicast_dns` | ●● bindings | ✘ | ●●● |
+| Foreground service, survives screen off | ●●● | ●●● | ● JS runtime is unreliable in the background; ends up needing a native Kotlin service anyway | ●● `flutter_foreground_task`, background isolate | ●● | ✘ | ●●● |
+| Kiosk / Device Owner / boot start | ●●● | ●●● | ●● native module | ●● plugin / native code | ●● | ● managed browser kiosk only | ●●● |
+| Keyboard **+ gamepad** input | ●●● full `KeyEvent` / `InputDevice` | ●●● | ● keyboard via lib; **gamepad needs a custom native module** | ●● keyboard good; gamepad via plugin | ●● | ●● Keyboard + Gamepad API in Chrome | ●●● |
+| On-device OCR (ML Kit) | ●●● first-party | ●●● | ●● wrapper libs | ●● `google_mlkit_text_recognition` | ● | ● (Tesseract.js, slow) | ●●● |
+| UI performance on cheap tablets | ●●● | ●●● | ●● good with the New Architecture; long lists need care | ●●● | ●● | ●● | ●● verbose |
+| Dev speed / UI iteration | ●● | ●● | ●●● fast refresh, huge ecosystem | ●●● hot reload | ●● | ●●● | ● |
+| Over-the-air updates without the Play Store | ●● self-hosted APK updates via Device Owner | ●● | ●●● EAS Update / CodePush for JS changes | ●● (Shorebird) | ● | ●●● instant | ●● |
+| Share core logic with the cloud | ●● (Ktor server in Kotlin) | ●●● **same code** on device and server | ●●● TypeScript on device, Workers and dashboard | ● Dart servers are niche | ●● ASP.NET | ●●● | ●● |
+| Share UI with the web dashboard | ✘ | ● (Compose for Web, immature) | ●● React concepts, separate components | ●● Flutter Web (meh for dashboards) | ● | ●●● same app | ✘ |
+| Testability of the sync core (deterministic simulation, property tests) | ●●● JVM tests, Kotest | ●●● | ●● Jest + fast-check | ●● | ●● | ●● | ●● |
+| Native code needed for *our* requirements | none | none | **many modules** (service, sockets, gamepad, kiosk, maybe OCR) | some plugins | some | **most features impossible** | none |
+| Long-term risk | low (Google first-party) | low–med (KMP stable; Compose MP newer) | med (dependency churn, RN upgrades) | low–med | med–high (MAUI maturity) | low for UI, but disqualified for ingest | low, but legacy style |
+| iOS later (non-goal) | ✘ | ●● | ●●● | ●●● | ●● | ●●● | ✘ |
+
+#### 7.5.3 Takeaways
+- **Web/PWA is out** for ingest and sync tablets (no listening sockets, no background service). It could still serve a read-only customer status board (FR-CUS-01) or the dashboard.
+- **React Native** is excellent for typical app UIs, but this project's hardest parts (socket server, always-on service, gamepad input, kiosk, possibly OCR) all sit **outside** what RN does natively. We would write and maintain those in Kotlin anyway, then bridge them into JS, with **two languages and a bridge in the critical path**. Its strongest advantages (OTA updates, TypeScript shared with a web dashboard) are real but don't outweigh this.
+- **Flutter** is the strongest cross-platform option here (sockets built in, good performance, good keyboard handling), but it still needs plugins for the service, kiosk and gamepad, and Dart is weak for sharing logic with the cloud.
+- **Kotlin native** has zero gaps against the requirements. Every hard requirement is a first-party Android API.
+
+#### 7.5.4 Recommendation
+**Kotlin, with Jetpack Compose for the UI, and the core as a Kotlin Multiplatform (pure Kotlin) module.**
+- `core-*` modules (events, HLC, reducers, sync protocol, ticket parser, formatting rules engine) are pure Kotlin with no Android
+  dependencies. They're unit- and simulation-tested on the JVM, and **reused unchanged in the cloud server (Ktor)**, so reconciliation and stats use the
+  exact same logic as the tablets.
+- The Android app is a thin shell: Compose UI, foreground service, sockets, NsdManager, input, ML Kit.
+- **Web dashboard:** a separate TypeScript/React app talking to the cloud's JSON API. The UI isn't shared, which is fine because a dashboard and a KDS screen are different products.
+- This tilts **Q-CLOUD-1** toward **Ktor on a small VPS/Fly.io**, so the cloud server can share the Kotlin core. Cloudflare stays an option for the relay only.
+- Runner-up: **Flutter**, if fast UI iteration or iOS ever becomes more important than first-party Android access.
+
+Implementation notes:
+- Min SDK 26 (Android 8), target the latest version.
+- **SQLite** through SQLDelight (multiplatform), so the cloud and tests can share schema and queries.
+- **Ktor** embedded server and client for LAN WebSockets, and **NsdManager** (mDNS) for discovery.
+- Foreground service keeps the printer listener and sync engine alive. `BOOT_COMPLETED` starts the app, and lock-task (kiosk) mode is set up through Android Device Owner provisioning.
 - Module layout (proposed):
-  `core-model` (events, reducers, HLC; pure Kotlin, heavily unit-tested) · `core-sync` · `square-ingest` ·
-  `data` (SQLite) · `ui-kds` · `ui-admin` · `app`.
+  `core-model` (events, reducers, HLC) · `core-sync` · `core-format` (rules engine) · `core-ticket` (printer-stream parser) ·
+  `android-ingest` (printer emulation, OCR, Square poll) · `android-input` (key/gamepad mapping) · `data` (SQLDelight) · `ui-kds` · `ui-admin` · `app` · `cloud-server`.
 
-❓ **Q-TECH-1:** Any preference on language or stack? (Kotlin native is recommended for kiosk control,
-background services and performance. Flutter or React Native would be the alternatives.)
+❓ **Q-TECH-1:** Agree with Kotlin native + a shared Kotlin core over React Native and Flutter? Any team skills or preferences to weigh (e.g. existing TypeScript experience)?
 
 ### 7.6 Data model (sketch)
 ```
@@ -413,6 +516,12 @@ Order        { id, square_order_id, square_version, display_number, customer_nam
                source, fulfillment_type, pickup_at, created_at, notes, state }
 LineItem     { id, order_id, catalog_item_id, name, qty, modifiers[], note, station_ids[], state }
 Station      { id, name, routing_rules[], timer_thresholds, sound, layout }
+FormatRule   { id, priority, enabled, scope (all | station_ids[] | device_ids[]),
+               match { kind: modifier|modifier_group|item|category|note_keyword|order_type,
+                       catalog_id?, name_normalised?, regex? },
+               style { text_color?, bg_color?, bold?, uppercase?, size?, badge?, tint: item|ticket?, blink_s? },
+               display { rename?, hide?, sort_rank? }, sound? }
+KeyMapping   { device_id, input_device_descriptor, key_or_button_code, press: short|long|double, action, arg? }
 Device       { id, name, public_key, assigned_station_ids[], role_flags (ingestor, expo…) }
 Event        { event_id, device_id, hlc, type, payload }   // the only thing that is synced
 ```
@@ -428,7 +537,8 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | Mounts | VESA or under-cabinet arms, splash-resistant cases | |
 | Power | Always-on chargers; battery-protection mode (charge to 85%) where the device supports it | |
 | Network | Dedicated SSID or VLAN for KDS with client-to-client traffic allowed; ideally a UPS on the router | |
-| Optional | Raspberry Pi 5 / mini-PC as an always-on peer and ingestor (Q-ARCH-2); USB bump bar (FR-UI-12) | |
+| Optional | Raspberry Pi 5 / mini-PC as an always-on peer and ingestor (Q-ARCH-2) | |
+| Buttons | Per station: 2–4 sealed 60 mm arcade buttons + USB encoder (keyboard or gamepad mode) in a small enclosure, **or** an RP2040/ESP32 DIY box (USB or BLE). Needs an OTG hub with power pass-through if wired (FR-INP-*) | Which stations get buttons? Wired or wireless? |
 
 ---
 
@@ -454,7 +564,7 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 |---|---|---|
 | M1 | `core-model` + `core-sync`: event log, HLC, reducers, LAN sync between emulators | Property tests: random event orders converge |
 | M2 | Single-station KDS UI fed by the **printer path** (ingest + parse/OCR), plus the API poll for reconciliation | Orders on screen < 2 s; bump/recall; reconciliation fixes injected parse errors |
-| M3 | Multi-station routing, expo, multi-tablet LAN sync, failover | Chaos test: kill/rejoin tablets, Wi-Fi off/on |
+| M3 | Multi-station routing, expo, multi-tablet LAN sync, failover, **formatting rules editor (FMT P0)**, **key/gamepad mapping + arcade buttons (INP P0)** | Chaos test: kill/rejoin tablets, Wi-Fi off/on; a full rush shift run with buttons only |
 | M4 | Cloud: webhook ingest, relay, stats upload, minimal dashboard | Offline buffer replays with no loss |
 | M5 | Pilot in the shop alongside paper or Fresh; fix what the bar finds | 2 weeks with no lost tickets |
 | M6 | Parity extras: all-day counts, customer board, SMS, bump bar, reports | Fresh parity matrix fully green for P1 |
@@ -487,7 +597,9 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | Q-ARCH-1 | Peer-to-peer replication vs hub | M1 |
 | Q-ARCH-2 | Square token on a tablet vs dedicated on-site box | M2, NFR-SEC-02 |
 | Q-CLOUD-1 | Cloud stack | M4 |
-| Q-TECH-1 | App stack (Kotlin native recommended) | M1 |
+| Q-TECH-1 | App stack: Kotlin native + shared Kotlin core recommended over React Native and Flutter (§7.5) | M1 |
+| Q-FMT-1 | Which options need colours on day one? Is the shop's colour convention already used on cups or labels? | M3 |
+| Q-INP-1 | Which stations get physical buttons, and how many per station? Wired (OTG + power pass-through) or Bluetooth? | M3 |
 | Q-CUS | Customer status board / SMS wanted? | M6 |
 | Q-HW | Existing tablets, bump bars? | M5 |
 
@@ -503,6 +615,7 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | 2026-10-30 | D-004 | **Primary ingest = tablet acts as a LAN network printer for the Terminal** (like Fresh printer mode, which uses Wi-Fi/LAN, not Bluetooth). Square API is the backup and reconciliation path | Owner direction; only path that can work without internet |
 | 2026-10-30 | ~~D-005~~ | ~~Do not use or imitate the "Fresh KDS" printer model~~: **superseded by D-006** | Was based on an assumed handshake or licence check, for which no evidence was found |
 | 2026-10-30 | D-006 | Spike S1 captures and documents the message format of **every** printer model the Terminal offers, **including the "Fresh KDS" entry**. The production ingest format is chosen from the results (text over raster; simplest robust option) | Evidence suggests the Fresh entry is a lightly modified printer stream, probably the most decodable; decide on data, not assumption |
+| 2026-11-01 | D-007 | Custom formatting rules (FMT) and physical button input (INP) are P0 requirements | Owner direction |
 
 ---
 
@@ -512,3 +625,4 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | 0.1 | 2026-10-30 | First draft: requirements skeleton, failure modes, proposed architecture |
 | 0.2 | 2026-10-30 | Researched how Fresh works with Square (printer mode over LAN vs Orders API). Printer path becomes primary ingest, with redundancy, OCR risk and reconciliation. Moon-routed vs Square-routed comparison. M0 spikes S1–S5. Assumptions A-01/A-02 confirmed |
 | 0.3 | 2026-10-30 | Fresh printer-entry evidence reviewed: no handshake or licence evidence found; Fresh began as an Epson printer emulator. D-005 superseded by D-006: S1 captures every printer type, including the Fresh entry |
+| 0.4 | 2026-11-01 | Added §4.8 custom formatting rules (FMT), §4.9 peripheral input / arcade buttons (INP), and the technology comparison matrix plus recommendation (§7.5) |
