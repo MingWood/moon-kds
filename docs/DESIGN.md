@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | DRAFT, revision 0.4 |
+| **Status** | DRAFT, revision 0.5 |
 | **Owner** | Moonwake Roasters |
 | **Last updated** | 2026-11-01 |
 | **Benchmark** | Fresh KDS (the feature set and reliability we must meet or beat) |
@@ -231,7 +231,7 @@ Staff need to spot certain options at a glance, e.g. **decaf** or **dark roast**
 | FR-FMT-09 | **Accessibility:** colour is never the only signal. Every colour rule also gets text or a badge; the palette is colour-blind safe and legible on the dark theme (≥ 4.5:1 contrast check in the editor) | P0 | ✘ | Draft |
 | FR-FMT-10 | **Rules sync** to all tablets as versioned `ConfigChanged` events, work offline, and can be exported/imported as JSON (back up and share between shops) | P0 | ✘ | Draft |
 | FR-FMT-11 | **Item-level styles:** e.g. tint all iced drinks blue, or flag items with 3+ modifiers as "complex" | P1 | ✘ | Draft |
-| FR-FMT-12 | **Starter presets** for a coffee shop: decaf, dark roast, half-caf, each alt-milk colour, extra shot, iced, allergy keywords. One tap to load, then edit | P1 | ✘ | Draft |
+| FR-FMT-12 | **Day-one presets (decided, D-009): milk types and espresso types only.** Each milk option gets its own colour (e.g. oat, almond, soy, coconut, skim, half & half). Each espresso option gets its own colour (e.g. decaf, half-caf, dark roast, other house espresso options). The exact list comes from the shop's Square modifier groups. Other presets (extra shot, iced, allergy keywords) ship disabled | P0 | ✘ | Decided |
 | FR-FMT-13 | **Sound or attention rules:** a matching item can trigger a distinct chime (e.g. allergy) | P2 | ✘ | Draft |
 
 Example rule set (starter preset sketch):
@@ -263,13 +263,42 @@ without touching the screen. Touch always keeps working alongside.
 | FR-INP-08 | **Presets** for common layouts: 2-button (next + bump), 4-button (prev/next/bump/recall), 10-key bump bar (Fresh-style), numeric keypad | P1 | ~ | Draft |
 | FR-INP-09 | Device status shown in the status bar (keyboard/gamepad connected), with an alert if a configured device disconnects | P1 | ✘ | Draft |
 | FR-INP-10 | Input never leaks out of kiosk mode (no system shortcuts like Home/Alt-Tab reaching Android) | P0 | ✘ | Draft |
-| FR-INP-11 | **Remote buttons:** a button box attached to tablet A can act on another station's tickets (action sent as an event over sync), e.g. one bump box at the hand-off counter | P2 | ✘ | Draft |
+| FR-INP-11 | **Remote buttons:** a button box can act on any station's tickets (action sent as an event over sync), not just the tablet it's paired with | P1 | ✘ | Draft |
+| FR-INP-12 | **Initial scope (D-010): only the Expo tablet gets physical buttons.** Other stations stay touch-only, but the same input stack is available to them later | P0 | — | Decided |
+| FR-INP-13 | **End-to-end acknowledgement:** each press shows a result on the button box itself (LED/beeper: green = applied, red = rejected/failed) **only after** the KDS has applied the action, plus on-screen feedback. Staff never have to guess whether a press counted | P0 | ✘ | Draft |
+| FR-INP-14 | **Exactly-once presses:** each press carries a device ID and sequence number. Retransmits are deduped, and nothing is replayed after a reconnect unless it's still valid (a press older than 2 s is dropped and shown red) | P0 | ✘ | Draft |
+| FR-INP-15 | **Link health:** heartbeat every ≤ 1 s. A lost link is detected within 3 s and shows a loud banner on Expo ("BUTTONS DISCONNECTED — use touch") and a red LED on the box | P0 | ✘ | Draft |
+| FR-INP-16 | **Reliability targets (verified in spike S6 at the real bar location):** 0 missed and 0 duplicate presses in 1,000; p95 press-to-screen latency ≤ 150 ms; **no lost first press after idle** (the main Bluetooth weakness) | P0 | ✘ | Draft |
+| FR-INP-17 | **Buttons follow the Expo role:** if the Expo tablet fails and another tablet takes the role (FR-RTE-04), the button box rebinds automatically without re-pairing | P1 | ✘ | Draft |
+| FR-INP-18 | **Power:** prefer mains (USB wall adapter) at the box. If battery powered, report the battery level and alert at 20% | P0 | ✘ | Draft |
+| FR-INP-19 | **Touch is always the fallback.** No workflow requires the buttons | P0 | ✔ | Draft |
 
 Hardware notes (detail in §8):
 - **Arcade buttons + USB encoder** (~$15–30): the simplest option. Choose a **keyboard-mode** encoder (e.g. I-PAC-style) or a gamepad-mode encoder, since both are supported (FR-INP-01/02).
 - **DIY:** an RP2040 or ESP32 board running keyboard firmware (QMK/KMK) acts as a USB or BLE keyboard. Easy to make wireless.
 - **Power:** a USB-C OTG device blocks the tablet's charging port unless you use an **OTG hub with power pass-through** (verify per tablet model). Bluetooth avoids this but needs batteries or power, and adds pairing and drop-out risk.
 - **Wet environment:** sealed arcade buttons or IP65 keypads; mount the box away from the steam wand.
+
+#### 4.9.1 Wireless vs wired buttons: trade-off (Expo)
+Robustness is the top priority, but the button box needs to sit at the bar, away from the Expo tablet.
+
+| Option | How | Reliability risks | Mitigations | Location convenience | Verdict |
+|---|---|---|---|---|---|
+| **A. Wired USB** | Arcade buttons + USB encoder → OTG hub with power pass-through → tablet (active USB extension cable if far) | Lowest. Risks: cable damage, the hub/charging combo on some tablets, and a cable run across the bar | Cable channel / under-counter routing; test the specific hub with the specific tablet | ✘ cable tied to the tablet | Most reliable; use if S6 shows wireless isn't good enough |
+| **B. Bluetooth HID keypad** (off the shelf, or DIY BLE) | Paired to the Expo tablet as a keyboard | **Highest.** First press after sleep is often lost or slow (BLE power saving); random drops/re-pairing; Android reconnect behaviour varies by tablet; batteries; 2.4 GHz congestion; **no acknowledgement** (a keyboard can't learn whether its press was applied); tied to one tablet, so it can't follow Expo failover | Disable sleep on DIY firmware; mains power; heartbeat via a "keep-alive" key; but no true ack | ✔ | Prototype only, not for production |
+| **C. 2.4 GHz dongle keypad** (Logitech-style receiver) | USB receiver in the tablet | Better than BT at reconnecting, but it still occupies the USB port (OTG + power issue again), sleeps, and has no ack | — | ✔ (but dongle on tablet) | Not recommended |
+| **D. Wi-Fi button box (ESP32), our own protocol** — **recommended** | Mains-powered ESP32 + arcade buttons + status LED/beeper. Talks to the KDS over the shop LAN with our authenticated protocol (presses with sequence numbers, ack, heartbeat) | Depends on Wi-Fi, but **so does the whole KDS already**, so it adds no new dependency. Custom firmware to maintain. Wi-Fi reconnect after a router reboot takes a few seconds | Ack + LED feedback (FR-INP-13); exactly-once (FR-INP-14); heartbeat + alert (FR-INP-15); no sleep (mains); **can talk to any tablet, so it follows Expo failover** (FR-INP-17); optional Ethernet (ESP32 with PoE/Ethernet) | ✔ anywhere with power | **Best reliability among wireless options**, and the only one with a real "did it work?" signal |
+| **E. Hybrid** | Box D firmware also exposes **USB HID** when a cable is plugged in | Fallback if Wi-Fi is down | Same box, plug in a cable in an emergency | ✔ / ✘ | Nice-to-have on top of D |
+
+**Recommendation:**
+1. **Prototype quickly with B** (an off-the-shelf BT keypad, ~$20) to settle the button layout and workflow with staff. Treat it as disposable.
+2. **Production: D**, an ESP32 Wi-Fi button box, mains powered, with acknowledged presses and status LEDs, plus E (USB fallback) if cheap.
+3. **Spike S6** measures A, B and D side by side at the real bar location. If D misses the FR-INP-16 targets, fall back to A.
+
+Why D beats Bluetooth for robustness: wireless itself isn't the main risk. The risk is **not knowing whether a press arrived**. A keyboard protocol (B, C) is fire-and-forget. Our own protocol (D) gives an acknowledgement, dedupe, link monitoring and failover, which makes failures *visible* instead of silent.
+
+⚠ **UX check:** if the box is out of sight of the Expo screen, positional actions ("bump ticket 3") are risky.
+Prefer "bump oldest / bump selected" with the box LED and a large on-screen cursor, plus a short undo (FR-INP-07). See Q-INP-2.
 
 ---
 
@@ -506,9 +535,9 @@ Implementation notes:
 - Foreground service keeps the printer listener and sync engine alive. `BOOT_COMPLETED` starts the app, and lock-task (kiosk) mode is set up through Android Device Owner provisioning.
 - Module layout (proposed):
   `core-model` (events, reducers, HLC) · `core-sync` · `core-format` (rules engine) · `core-ticket` (printer-stream parser) ·
-  `android-ingest` (printer emulation, OCR, Square poll) · `android-input` (key/gamepad mapping) · `data` (SQLDelight) · `ui-kds` · `ui-admin` · `app` · `cloud-server`.
+  `android-ingest` (printer emulation, OCR, Square poll) · `android-input` (key/gamepad mapping) · `data` (SQLDelight) · `ui-kds` · `ui-admin` · `app` · `cloud-server` · `firmware-buttonbox` (ESP32, ESP-IDF/Arduino C++; paired like a tablet at setup, same authenticated LAN protocol per NFR-SEC-01).
 
-❓ **Q-TECH-1:** Agree with Kotlin native + a shared Kotlin core over React Native and Flutter? Any team skills or preferences to weigh (e.g. existing TypeScript experience)?
+✔ **Q-TECH-1 resolved (D-008):** Kotlin native + a shared Kotlin core. The owner has no language preference.
 
 ### 7.6 Data model (sketch)
 ```
@@ -538,7 +567,7 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | Power | Always-on chargers; battery-protection mode (charge to 85%) where the device supports it | |
 | Network | Dedicated SSID or VLAN for KDS with client-to-client traffic allowed; ideally a UPS on the router | |
 | Optional | Raspberry Pi 5 / mini-PC as an always-on peer and ingestor (Q-ARCH-2) | |
-| Buttons | Per station: 2–4 sealed 60 mm arcade buttons + USB encoder (keyboard or gamepad mode) in a small enclosure, **or** an RP2040/ESP32 DIY box (USB or BLE). Needs an OTG hub with power pass-through if wired (FR-INP-*) | Which stations get buttons? Wired or wireless? |
+| Buttons | **Expo only (v1).** Production: a mains-powered ESP32 Wi-Fi button box (3–5 sealed 60 mm arcade buttons, RGB status LED, beeper, optional USB-HID fallback). Prototype: an off-the-shelf BT keypad. Wired USB + powered OTG hub is the fallback if S6 fails (§4.9.1) | Mains power at the bar spot? |
 
 ---
 
@@ -559,6 +588,7 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 3. **S3, OCR accuracy** (if raster): 200+ real tickets incl. long modifier lists; target ≥ 99.5% exact line accuracy after the template parser.
 4. **S4, API timing:** webhook and poll latency vs the printer path; confirm a field that reliably links a printed ticket to its Square order.
 5. **S5, multi-printer behaviour:** Terminal with 2 ingest printers. Are both printed in parallel? Is there a retry if one is down? Error pop-ups on the Terminal?
+6. **S6, button reliability:** at the real bar location during service hours, compare wired USB, a BT keypad and an ESP32 Wi-Fi prototype. Run 1,000 presses each, including presses after 5/30/120 min idle, a microwave or blender running, and a router reboot. Measure missed and duplicate presses, latency, and reconnect time against FR-INP-16.
 
 | M | Scope | Exit criteria |
 |---|---|---|
@@ -597,9 +627,11 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | Q-ARCH-1 | Peer-to-peer replication vs hub | M1 |
 | Q-ARCH-2 | Square token on a tablet vs dedicated on-site box | M2, NFR-SEC-02 |
 | Q-CLOUD-1 | Cloud stack | M4 |
-| Q-TECH-1 | App stack: Kotlin native + shared Kotlin core recommended over React Native and Flutter (§7.5) | M1 |
-| Q-FMT-1 | Which options need colours on day one? Is the shop's colour convention already used on cups or labels? | M3 |
-| Q-INP-1 | Which stations get physical buttons, and how many per station? Wired (OTG + power pass-through) or Bluetooth? | M3 |
+| ~~Q-TECH-1~~ | ✔ Resolved: Kotlin (D-008) | — |
+| ~~Q-FMT-1~~ | ✔ Resolved: milk and espresso types on day one (D-009). Still to do: confirm the exact modifier lists and colours from the Square catalog | M3 |
+| ~~Q-INP-1~~ | ✔ Resolved: Expo only; wireless preferred if it passes S6 (D-010) | — |
+| Q-INP-2 | Where exactly will the button box sit, and can staff see the Expo screen from there? Which actions does Expo need (e.g. bump oldest, next/prev, recall)? How many buttons? | M3 |
+| Q-INP-3 | Is there mains power (an outlet or USB) at the button location? Is Ethernet nearby (for a PoE/Ethernet box)? | M3 |
 | Q-CUS | Customer status board / SMS wanted? | M6 |
 | Q-HW | Existing tablets, bump bars? | M5 |
 
@@ -616,6 +648,9 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | 2026-10-30 | ~~D-005~~ | ~~Do not use or imitate the "Fresh KDS" printer model~~: **superseded by D-006** | Was based on an assumed handshake or licence check, for which no evidence was found |
 | 2026-10-30 | D-006 | Spike S1 captures and documents the message format of **every** printer model the Terminal offers, **including the "Fresh KDS" entry**. The production ingest format is chosen from the results (text over raster; simplest robust option) | Evidence suggests the Fresh entry is a lightly modified printer stream, probably the most decodable; decide on data, not assumption |
 | 2026-11-01 | D-007 | Custom formatting rules (FMT) and physical button input (INP) are P0 requirements | Owner direction |
+| 2026-11-01 | D-008 | **Kotlin** (Jetpack Compose UI + shared pure-Kotlin core, Ktor cloud) | Owner has no language preference; Kotlin has no gaps against the requirements (§7.5) |
+| 2026-11-01 | D-009 | Day-one formatting presets: **milk types and espresso types** | Owner input |
+| 2026-11-01 | D-010 | Physical buttons on the **Expo tablet only** to start. Wireless preferred for placement at the bar, **if** it passes the S6 reliability spike; recommended design is an ESP32 Wi-Fi box with acknowledged presses | Owner input; robustness first |
 
 ---
 
@@ -626,3 +661,4 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | 0.2 | 2026-10-30 | Researched how Fresh works with Square (printer mode over LAN vs Orders API). Printer path becomes primary ingest, with redundancy, OCR risk and reconciliation. Moon-routed vs Square-routed comparison. M0 spikes S1–S5. Assumptions A-01/A-02 confirmed |
 | 0.3 | 2026-10-30 | Fresh printer-entry evidence reviewed: no handshake or licence evidence found; Fresh began as an Epson printer emulator. D-005 superseded by D-006: S1 captures every printer type, including the Fresh entry |
 | 0.4 | 2026-11-01 | Added §4.8 custom formatting rules (FMT), §4.9 peripheral input / arcade buttons (INP), and the technology comparison matrix plus recommendation (§7.5) |
+| 0.5 | 2026-11-01 | Resolved Q-TECH-1 (Kotlin), Q-FMT-1 (milk + espresso), Q-INP-1 (Expo only). Added the wireless-vs-wired button trade-off (§4.9.1), FR-INP-12..19 and spike S6 |
