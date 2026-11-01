@@ -631,7 +631,7 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | ~~Q-TECH-1~~ | ✔ Resolved: Kotlin (D-008) | — |
 | ~~Q-FMT-1~~ | ✔ Resolved: milk and espresso types on day one (D-009). Still to do: confirm the exact modifier lists and colours from the Square catalog | M3 |
 | ~~Q-INP-1~~ | ✔ Resolved: Expo only; wireless preferred if it passes S6 (D-010) | — |
-| ~~Q-INP-2~~ | ✔ Partly resolved: the Expo screen is always visible from the box (sometimes out of reach). Still open: which actions and how many buttons (settle with the BT prototype) | M3 |
+| Q-INP-2 | Partly resolved: the Expo screen is always visible from the box (sometimes out of reach). Still open: which actions and how many buttons (settle with the BT prototype) | M3 |
 | Q-INP-3 | Is there mains power (an outlet or USB) at the button location? Is Ethernet nearby (for a PoE/Ethernet box)? | M3 |
 | Q-CUS | Customer status board / SMS wanted? | M6 |
 | Q-HW | Existing tablets, bump bars? | M5 |
