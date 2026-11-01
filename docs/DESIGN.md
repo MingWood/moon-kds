@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | DRAFT, revision 0.5 |
+| **Status** | DRAFT, revision 0.6 |
 | **Owner** | Moonwake Roasters |
 | **Last updated** | 2026-11-01 |
 | **Benchmark** | Fresh KDS (the feature set and reliability we must meet or beat) |
@@ -257,7 +257,7 @@ without touching the screen. Touch always keeps working alongside.
 | FR-INP-02 | Accept input from **HID gamepad/joystick encoders** (the cheap "zero-delay" USB arcade encoders appear as gamepads, not keyboards) | P0 | ✘ | Draft |
 | FR-INP-03 | **Per-tablet key mapping screen** with a "press a button to assign" learn mode. Any key or gamepad button can map to any action | P0 | ~ | Draft |
 | FR-INP-04 | **Actions:** next/previous ticket, next/previous item, bump selected item, bump selected ticket, **direct bump ticket by position (1–9)**, start/in-progress, recall last, undo, scroll page, toggle all-day view, rush/pin | P0 | ✔ | Draft |
-| FR-INP-05 | **Visible selection cursor** (thick, high-contrast outline) that the buttons move. The cursor follows sensibly when tickets arrive or leave (never jumps onto a newly arrived ticket mid-action) | P0 | ✔ | Draft |
+| FR-INP-05 | **Visible selection cursor** (thick, high-contrast outline, readable from the button box position), with **large position numbers (1–9) on each ticket header** for direct bumps, that the buttons move. The cursor follows sensibly when tickets arrive or leave (never jumps onto a newly arrived ticket mid-action) | P0 | ✔ | Draft |
 | FR-INP-06 | **Long-press and double-press** can be mapped separately (e.g. long-press "bump" = recall), with configurable thresholds | P1 | ✘ | Draft |
 | FR-INP-07 | **Safety:** debounce (default 150 ms), ignore repeats while held, and a short undo toast after every hardware bump | P0 | ~ | Draft |
 | FR-INP-08 | **Presets** for common layouts: 2-button (next + bump), 4-button (prev/next/bump/recall), 10-key bump bar (Fresh-style), numeric keypad | P1 | ~ | Draft |
@@ -297,8 +297,9 @@ Robustness is the top priority, but the button box needs to sit at the bar, away
 
 Why D beats Bluetooth for robustness: wireless itself isn't the main risk. The risk is **not knowing whether a press arrived**. A keyboard protocol (B, C) is fire-and-forget. Our own protocol (D) gives an acknowledgement, dedupe, link monitoring and failover, which makes failures *visible* instead of silent.
 
-⚠ **UX check:** if the box is out of sight of the Expo screen, positional actions ("bump ticket 3") are risky.
-Prefer "bump oldest / bump selected" with the box LED and a large on-screen cursor, plus a short undo (FR-INP-07). See Q-INP-2.
+✔ **Line of sight (resolved, Q-INP-2):** the Expo screen is always visible from the button box, though sometimes just out of reach.
+So positional actions ("bump ticket 3") and cursor-based actions are both safe to offer. Design for reading from a distance: large
+position numbers on each ticket header and a thick, high-contrast cursor (FR-INP-05). The undo (FR-INP-07) stays as normal error recovery.
 
 ---
 
@@ -630,7 +631,7 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | ~~Q-TECH-1~~ | ✔ Resolved: Kotlin (D-008) | — |
 | ~~Q-FMT-1~~ | ✔ Resolved: milk and espresso types on day one (D-009). Still to do: confirm the exact modifier lists and colours from the Square catalog | M3 |
 | ~~Q-INP-1~~ | ✔ Resolved: Expo only; wireless preferred if it passes S6 (D-010) | — |
-| Q-INP-2 | Where exactly will the button box sit, and can staff see the Expo screen from there? Which actions does Expo need (e.g. bump oldest, next/prev, recall)? How many buttons? | M3 |
+| ~~Q-INP-2~~ | ✔ Partly resolved: the Expo screen is always visible from the box (sometimes out of reach). Still open: which actions and how many buttons (settle with the BT prototype) | M3 |
 | Q-INP-3 | Is there mains power (an outlet or USB) at the button location? Is Ethernet nearby (for a PoE/Ethernet box)? | M3 |
 | Q-CUS | Customer status board / SMS wanted? | M6 |
 | Q-HW | Existing tablets, bump bars? | M5 |
@@ -662,3 +663,4 @@ Order states: `NEW → IN_PROGRESS → READY (per station) → COMPLETED (expo)`
 | 0.3 | 2026-10-30 | Fresh printer-entry evidence reviewed: no handshake or licence evidence found; Fresh began as an Epson printer emulator. D-005 superseded by D-006: S1 captures every printer type, including the Fresh entry |
 | 0.4 | 2026-11-01 | Added §4.8 custom formatting rules (FMT), §4.9 peripheral input / arcade buttons (INP), and the technology comparison matrix plus recommendation (§7.5) |
 | 0.5 | 2026-11-01 | Resolved Q-TECH-1 (Kotlin), Q-FMT-1 (milk + espresso), Q-INP-1 (Expo only). Added the wireless-vs-wired button trade-off (§4.9.1), FR-INP-12..19 and spike S6 |
+| 0.6 | 2026-11-01 | Expo screen always visible from the button box: positional bumps are fine; FR-INP-05 is now sized for reading from a distance |
